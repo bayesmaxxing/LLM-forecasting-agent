@@ -4,33 +4,36 @@ import os
 from google.oauth2.credentials import Credentials 
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request 
-from googla_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow
+from email.mime.text import MIMEText
+from googleapiclient.errors import HttpError
 import base64
+from dotenv import load_dotenv
 
-def get_news(topic: str):
-    pass
-
-def get_forecasts(category: str):
+def get_forecasts():
     """
     Get the forecasts related to a particular category.
     :param category: the category of forecasts to fetch.
     """
+    load_dotenv()
 
-    with pg.connect("dbname=postgres user=postgres password=") as conn:
+    db_pass = os.getenv("DB_PASSWORD")
+    host = os.getenv("HOST")
+
+    with pg.connect(f'dbname=postgres user=postgres host={host} port=5432 password={db_pass}') as conn:
         with conn.cursor() as cur:
             cur.execute("""
                         SELECT question, category, created  
                         FROM forecast_v2
-                        WHERE resolved IS NULL AND category LIKE (%s%)
-                        """, (category,))
+                        WHERE resolved IS NULL
+                        """)
 
             forecasts = cur.fetchall()
             return [
                 {
-                    "id": row[0],
-                    "question": row[1],
-                    "category": row[2],
-                    "created_at": row[3]
+                    "question": row[0],
+                    "category": row[1],
+                    "created_at": row[2]
                 }
                 for row in forecasts
             ]
@@ -43,7 +46,7 @@ def download_gmail_emails(num_emails=10, tag="news"):
     :return: A list of dictionaries containing email metadata and text content
     """
     
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+    SCOPES = ['https://www.googleapis.com/auth/gmail.modify','https://www.googleapis.com/auth/gmail.send']
 
     creds = None
     
