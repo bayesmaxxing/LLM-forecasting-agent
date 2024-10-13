@@ -5,3 +5,4 @@ token.json
 __pycache__/
 .env
 swarm_env/
+logfile.log
