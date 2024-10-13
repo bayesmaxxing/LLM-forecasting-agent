@@ -1,2 +1,2 @@
-# LLM-forecasting-agent 
-The LLM forecasting agent is an AI agent built to facilitate my forecasting practice.
+# Forecasting Agents 
+This is a repo where I experiment with forecasting agents. The code is mostly going to be slop, feel free to suggest improvements.

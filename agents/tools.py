@@ -157,4 +157,17 @@ def send_email(subject, body):
         print(f'An error occurred: {error}')
         return None
 
+def execute_query(query):
+    """
+    Executes the provided query in the database
+    """
+    load_dotenv()
+    db_pass = os.getenv("DB_PASSWORD")
+    host = os.getenv("HOST")
 
+    with pg.connect(f'dbname=postgres user=postgres host={host} port=5432 password={db_pass}') as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
+            query_results = cur.fetchall()
+            return query_results
