@@ -25,8 +25,9 @@ def main():
         prompt += "\n\nForecasts:\n"
         for forecast in forecasts:
             prompt += f"- {forecast}\n"
-
-        print(prompt)
+        
+        for new in news:
+            prompt += f"- {new}\n\n"
 
         response = client.messages.create(
             model = "claude-3-5-sonnet-20240620",
@@ -53,14 +54,14 @@ def main():
             messages = [{"role": "user", "content": prompt}]
         )
 
-        if response.content[0].type == 'tool_call' and response.content[0].tool_call_function == 'send_email': 
-            email_data = json.loads(response.content[0].tool_call.function.arguments)
-            subject = email_data['subject']
-            body = email_data['body']
-        else:
-            subject = "Forecasts summary"
-            body = response.content[0].text
+        email_data = None
+        for content in response.content:
+            if content.type == 'tool_use' and content.name == 'send_email':
+                email_data = content.input
+                break
 
+        subject = email_data['subject']
+        body = email_data['body']
         send_email(subject, body)
 
     except Exception as e:

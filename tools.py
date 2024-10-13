@@ -1,4 +1,6 @@
 import numpy as np 
+import html 
+from bs4 import BeautifulSoup
 import psycopg as pg 
 import os 
 from google.oauth2.credentials import Credentials 
@@ -69,6 +71,31 @@ def download_gmail_emails(num_emails=10, tag="news"):
     results = service.users().messages().list(userId='me', maxResults=num_emails, q=query).execute()
     messages = results.get('messages', [])
 
+    def get_body(message_part):
+            if isinstance(message_part, str):
+                return message_part
+
+            try:
+                mime_type = message_part.get('mimeType', '')
+                if mime_type == 'text/plain':
+                    data = message_part.get('body', {}).get('data')
+                    if data:
+                        return base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                elif mime_type == 'text/html':
+                    data = message_part.get('body', {}).get('data')
+                    if data:
+                        html_content = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
+                        soup = BeautifulSoup(html_content, 'html.parser')
+                        return soup.get_text(separator=' ',strip=True)
+                elif 'parts' in message_part:
+                    for part in message_part['parts']:
+                        body = get_body(part)
+                        if body:
+                            return body
+            except Exception as e:
+                print(f'Error processing email part: {str(e)}')
+            return ""
+        
     email_data = []
     for message in messages:
         msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
@@ -81,17 +108,9 @@ def download_gmail_emails(num_emails=10, tag="news"):
         subject = next(header['value'] for header in headers if header['name'] == 'Subject')
         sender = next(header['value'] for header in headers if header['name'] == 'From')
         
-        if parts:
-            body = parts[0]['body']
-            data = body.get('data')
-        else:
-            data = payload['body'].get('data')
-        
-        if data:
-            text = base64.urlsafe_b64decode(data).decode()
-        else:
-            text = ""
-        
+        text = get_body(payload)
+
+        text = html.unescape(text)
         email_data.append({
             'id': msg['id'],
             'subject': subject,
