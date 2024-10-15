@@ -31,7 +31,7 @@ def main():
 
         response = client.messages.create(
             model = "claude-3-5-sonnet-20240620",
-            max_tokens=3084,
+            max_tokens=5000,
             tools=[
                 {
                     "name": "send_email",
