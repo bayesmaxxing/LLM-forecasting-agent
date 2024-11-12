@@ -4,6 +4,9 @@ from swarm import Agent, Swarm
 import psycopg as pg 
 import os 
 from dotenv import load_dotenv
+from typing import AsyncGenerator
+import asyncio
+import contextlib
 
 class ForecastSwarm:
     def __init__(self):
@@ -19,7 +22,6 @@ class ForecastSwarm:
             reason: a string with the user's reason for the forecast point, created: datetime of forecast point creation]
             """
         self.setup_agents()
-
 
     def setup_agents(self):
         self.main_agent = Agent(
@@ -65,38 +67,23 @@ class ForecastSwarm:
 
     def execute_query(self, query: str):
         """
-        Executes a provided query in the database and returns the results
-        @param: query - the SQL query to execute in the database.
-        @returns: the result of executing the SQL query against the database
+        Executes a provided query in the database and returns the results asynchronously
         """
         load_dotenv()
         db_pass = os.getenv("DB_PASSWORD")
         host = os.getenv("HOST")
 
-        with pg.connect(f'dbname=postgres user=postgres host={host} port=5432 password={db_pass}') as conn:
-            with conn.cursor as cur:
+        with pg.connect(
+            f'dbname=postgres user=postgres host={host} port=5432 password={db_pass}'
+        ) as conn:
+             with conn.cursor() as cur:
                 cur.execute(query)
                 query_results = cur.fetchall()
                 return query_results
 
-    def calc_posterior(self, likelihood: float, prior: float, evidence: float):
-        """
-        Calculates the posterior probability using Bayes' rule given a likelihood, a prior, and some evidence.
-        @param: likelihood - the likelihood of observing the evidence.
-        @param: evidence - the probability of observing the evidence.
-        @param: prior - the prior probability of the outcome.
-        @returns: the Bayesian posterior according to (likelihood * prior) / evidence.
-        """
-        if evidence == 0: 
-            return "Cannot have probabilities that are equal to 0"
-        else:
-            return (likelihood * prior) / evidence 
-
     def get_news(self, query: str):
         """
-        Get the news for a specific related event or question.
-        @param: query - the news event, in the form of a sentence or keyword, to get news for.
-        @returns: a list of dicts with news related to the query from the past 48 hours.
+        Get the news for a specific related event or question asynchronously
         """
         ask_client_id = os.getenv('ASK_CLIENT_ID')
         ask_client_secret = os.getenv('ASK_CLIENT_SECRET')
@@ -108,13 +95,19 @@ class ForecastSwarm:
         oai = OpenAI(api_key=oai_api_key)
     
         response = ask.news.search_news(
-                query=query, 
-                n_articles=10,
-                return_type='string',
-                method="nl",
+            query=query, 
+            n_articles=10,
+            return_type='string',
+            method="nl"
         )
 
         return response.as_string
+
+    def calc_posterior(self, likelihood: float, prior: float, evidence: float):
+        if evidence == 0: 
+            return "Cannot have probabilities that are equal to 0"
+        else:
+            return (likelihood * prior) / evidence 
 
     def transfer_to_main(self):
         return self.main_agent
@@ -128,19 +121,25 @@ class ForecastSwarm:
     def transfer_to_query(self):
         return self.query_agent 
 
-    def run(self, message: str):
+    async def stream_run(self, message: str) -> AsyncGenerator[str, None]:
+        """
+        Async generator that streams the response chunks
+        """
         response = self.client.run(
             agent=self.main_agent,
-            messages=[{"role":"user", "content":message}]
+            messages=[{"role": "user", "content": message}],
+            stream=True
         )
-        return {
-            "agent_name": response.agent.name, 
-            "content": response.messages[-1]["content"],
-            "sender": response.messages[-1]["sender"]
-        }
+
+        for chunk in response:
+            if chunk and chunk.get('content') is not None:
+                yield chunk.get('content')
+                await asyncio.sleep(0.01)
 
 if __name__ == "__main__":
-    swarm = ForecastSwarm()
-    result = swarm.run("Hey, what's the latest news on the US Federal Reserve and the FED funds rate?")
-    print(result["agent_name"])
-    print(result["content"])
+    async def main():
+        swarm = ForecastSwarm()
+        async for chunk in swarm.stream_run("Hey, what's the latest news on the US Federal Reserve and the FED funds rate?"):
+            print(chunk, end="", flush=True)
+
+    asyncio.run(main())                
